@@ -26,10 +26,6 @@ atomic_t _malloc_size = ATOMIC_INIT(0);
 #endif
 #endif /* DBG_MEMORY_LEAK */
 
-#if defined(MODULE_IMPORT_NS)
-MODULE_IMPORT_NS(VFS_internal_I_am_really_a_filesystem_and_am_NOT_a_driver);
-#endif
-
 #if defined(PLATFORM_LINUX)
 /*
 * Translate the OS dependent @param error_code to OS independent RTW_STATUS_CODE
@@ -1216,6 +1212,11 @@ void _rtw_init_sema(_sema	*sema, int init_val)
 #ifdef PLATFORM_FREEBSD
 	sema_init(sema, init_val, "rtw_drv");
 #endif
+#ifdef PLATFORM_OS_XP
+
+	KeInitializeSemaphore(sema, init_val,  SEMA_UPBND); /* count=0; */
+
+#endif
 
 #ifdef PLATFORM_OS_CE
 	if (*sema == NULL)
@@ -1246,6 +1247,11 @@ void _rtw_up_sema(_sema	*sema)
 #ifdef PLATFORM_FREEBSD
 	sema_post(sema);
 #endif
+#ifdef PLATFORM_OS_XP
+
+	KeReleaseSemaphore(sema, IO_NETWORK_INCREMENT, 1,  FALSE);
+
+#endif
 
 #ifdef PLATFORM_OS_CE
 	ReleaseSemaphore(*sema,  1,  NULL);
@@ -1267,6 +1273,13 @@ u32 _rtw_down_sema(_sema *sema)
 	sema_wait(sema);
 	return  _SUCCESS;
 #endif
+#ifdef PLATFORM_OS_XP
+
+	if (STATUS_SUCCESS == KeWaitForSingleObject(sema, Executive, KernelMode, TRUE, NULL))
+		return  _SUCCESS;
+	else
+		return _FAIL;
+#endif
 
 #ifdef PLATFORM_OS_CE
 	if (WAIT_OBJECT_0 == WaitForSingleObject(*sema, INFINITE))
@@ -1276,18 +1289,10 @@ u32 _rtw_down_sema(_sema *sema)
 #endif
 }
 
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 inline void thread_exit(_completion *comp)
-#else
-inline void kthread_thread_exit(_completion *comp)
-#endif
 {
 #ifdef PLATFORM_LINUX
-#if LINUX_VERSION_CODE < KERNEL_VERSION(5, 17, 0)
 	complete_and_exit(comp, 0);
-#else
-	kthread_complete_and_exit(comp, 0);
-#endif
 #endif
 
 #ifdef PLATFORM_FREEBSD
@@ -1296,6 +1301,10 @@ inline void kthread_thread_exit(_completion *comp)
 
 #ifdef PLATFORM_OS_CE
 	ExitThread(STATUS_SUCCESS);
+#endif
+
+#ifdef PLATFORM_OS_XP
+	PsTerminateSystemThread(STATUS_SUCCESS);
 #endif
 }
 
@@ -1332,6 +1341,11 @@ void	_rtw_mutex_init(_mutex *pmutex)
 #ifdef PLATFORM_FREEBSD
 	mtx_init(pmutex, "", NULL, MTX_DEF | MTX_RECURSE);
 #endif
+#ifdef PLATFORM_OS_XP
+
+	KeInitializeMutex(pmutex, 0);
+
+#endif
 
 #ifdef PLATFORM_OS_CE
 	*pmutex =  CreateMutex(NULL, _FALSE, NULL);
@@ -1354,6 +1368,10 @@ void	_rtw_mutex_free(_mutex *pmutex)
 
 #endif
 
+#ifdef PLATFORM_OS_XP
+
+#endif
+
 #ifdef PLATFORM_OS_CE
 
 #endif
@@ -1370,6 +1388,11 @@ void	_rtw_spinlock_init(_lock *plock)
 #ifdef PLATFORM_FREEBSD
 	mtx_init(plock, "", NULL, MTX_DEF | MTX_RECURSE);
 #endif
+#ifdef PLATFORM_WINDOWS
+
+	NdisAllocateSpinLock(plock);
+
+#endif
 
 }
 
@@ -1377,6 +1400,12 @@ void	_rtw_spinlock_free(_lock *plock)
 {
 #ifdef PLATFORM_FREEBSD
 	mtx_destroy(plock);
+#endif
+
+#ifdef PLATFORM_WINDOWS
+
+	NdisFreeSpinLock(plock);
+
 #endif
 
 }
@@ -1412,6 +1441,11 @@ void	_rtw_spinlock(_lock	*plock)
 #ifdef PLATFORM_FREEBSD
 	mtx_lock(plock);
 #endif
+#ifdef PLATFORM_WINDOWS
+
+	NdisAcquireSpinLock(plock);
+
+#endif
 
 }
 
@@ -1426,6 +1460,11 @@ void	_rtw_spinunlock(_lock *plock)
 #ifdef PLATFORM_FREEBSD
 	mtx_unlock(plock);
 #endif
+#ifdef PLATFORM_WINDOWS
+
+	NdisReleaseSpinLock(plock);
+
+#endif
 }
 
 
@@ -1439,6 +1478,11 @@ void	_rtw_spinlock_ex(_lock	*plock)
 #endif
 #ifdef PLATFORM_FREEBSD
 	mtx_lock(plock);
+#endif
+#ifdef PLATFORM_WINDOWS
+
+	NdisDprAcquireSpinLock(plock);
+
 #endif
 
 }
@@ -2464,7 +2508,7 @@ int rtw_change_ifname(_adapter *padapter, const char *ifname)
 
 	rtw_init_netdev_name(pnetdev, ifname);
 
-	dev_addr_set(pnetdev, adapter_mac_addr(padapter));
+	_rtw_memcpy(pnetdev->dev_addr, adapter_mac_addr(padapter), ETH_ALEN);
 
 	if (rtnl_lock_needed)
 		ret = register_netdev(pnetdev);

@@ -594,10 +594,19 @@ struct xmit_buf {
 	u8 bulkout_id; /* for halmac */
 #endif /* RTW_HALMAC */
 
-#if defined(PLATFORM_LINUX) || defined(PLATFORM_FREEBSD)
+#if defined(PLATFORM_OS_XP) || defined(PLATFORM_LINUX) || defined(PLATFORM_FREEBSD)
 	PURB	pxmit_urb[8];
 	dma_addr_t dma_transfer_addr;	/* (in) dma addr for transfer_buffer */
 #endif
+
+#ifdef PLATFORM_OS_XP
+	PIRP		pxmit_irp[8];
+#endif
+
+#ifdef PLATFORM_OS_CE
+	USB_TRANSFER	usb_transfer_write_port;
+#endif
+
 	u8 bpending[8];
 
 	sint last[8];
@@ -612,6 +621,11 @@ struct xmit_buf {
 	u32 ff_hwaddr;
 	u8	pg_num;
 	u8	agg_num;
+#ifdef PLATFORM_OS_XP
+	PMDL pxmitbuf_mdl;
+	PIRP  pxmitbuf_irp;
+	PSDBUS_REQUEST_PACKET pxmitbuf_sdrp;
+#endif
 #endif
 
 #ifdef CONFIG_PCI_HCI
@@ -625,7 +639,9 @@ struct xmit_buf {
 #if defined(DBG_XMIT_BUF) || defined(DBG_XMIT_BUF_EXT)
 	u8 no;
 #endif
+
 };
+
 
 struct xmit_frame {
 	_list	list;
@@ -675,6 +691,7 @@ struct sta_xmit_priv {
 	sint	option;
 	sint	apsd_setting;	/* When bit mask is on, the associated edca queue supports APSD. */
 
+
 	/* struct tx_servq blk_q[MAX_NUMBLKS]; */
 	struct tx_servq	be_q;			/* priority == 0,3 */
 	struct tx_servq	bk_q;			/* priority == 1,2 */
@@ -688,6 +705,7 @@ struct sta_xmit_priv {
 	/* uint	sta_tx_bytes; */
 	/* u64	sta_tx_pkts; */
 	/* uint	sta_tx_fail; */
+
 
 };
 
@@ -774,6 +792,10 @@ struct	xmit_priv	{
 	_sema	tx_retevt;/* all tx return event; */
 	u8		txirp_cnt;
 
+#ifdef PLATFORM_OS_CE
+	USB_TRANSFER	usb_transfer_write_port;
+	/*	USB_TRANSFER	usb_transfer_write_mem; */
+#endif
 #ifdef PLATFORM_LINUX
 	struct tasklet_struct xmit_tasklet;
 #endif
